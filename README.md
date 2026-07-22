@@ -1,5 +1,5 @@
 # 2024/8/22
-修复了52破解的签到，此版本需要填写PJ52_TOKEN环境变量，具体请参考tg群聊。
+修复了52破解的签到，此版本仅需填写PJ52_COOKIE环境变量。
 # 现在不能签到的我也无能为力了，目前来看吾爱新增了一个加密的请求，这个请求根据申请任务返回的wzws_sid，去生成一个字符串，看着像RSA加密了一个字符串后的内容，用这个加密的字符串请求waf_zw_verify接口验证后返回新的wzws_sid，新的wzws_sid就可以用来签到。由于吾爱开启了反debug,我也找不出加密方式和公钥。那个加密用的js还是加密混淆的。就挺离谱！
 # 国内云服务器用户请使用代理（国内云服务ip已被吾爱拉黑，无法签到）
 # 国外云服务器无法完成MT论坛签到
@@ -14,7 +14,6 @@
 # GitHub Actions 定时签到
 仓库已支持 GitHub Actions，每天北京时间 9:00 自动执行签到（UTC 01:00）。
 请在仓库 `Settings -> Secrets and variables -> Actions` 中添加：
-- `PJ52_TOKEN`
 - `PJ52_COOKIE`
 
 # 如有疑问请加TG群https://t.me/+gv73-FuXRP0xZTA1
