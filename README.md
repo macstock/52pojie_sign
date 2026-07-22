@@ -11,6 +11,12 @@
 # 第二步
 将获取到的cookie填写进脚本的cookies = ""的引号里；
 本地运行，青龙(青龙可以在环境变量添加PJ52_COOKIE，多账户直接添加多个PJ52_COOKIE即可)运行均可（需要requests和bs4依赖）
+# GitHub Actions 定时签到
+仓库已支持 GitHub Actions，每天北京时间 9:00 自动执行签到（UTC 01:00）。
+请在仓库 `Settings -> Secrets and variables -> Actions` 中添加：
+- `PJ52_TOKEN`
+- `PJ52_COOKIE`
+
 # 如有疑问请加TG群https://t.me/+gv73-FuXRP0xZTA1
 # 有疑问就上tg问吧，issues交流太麻烦了，issues就关了
 ------------------------------------------------------
