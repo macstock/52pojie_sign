@@ -8,12 +8,9 @@ Date: 2024/8/22 18:30 (Original), 2025/06/25 (Refactor), 2026/06/11 (update)
 cron: 30 7 * * *
 new Env('吾爱破解签到');
 """
-import json
 import os
 import random
-import re
 import sys
-import urllib.parse
 from time import sleep
 from typing import Dict, Tuple, Optional, List, Any
 
@@ -40,11 +37,6 @@ SLEEP_TIME_RANGE: List[int] = [60, 180] # 稍微降低了默认值，原为 [100
 URL_BASE: str = "https://www.52pojie.cn/"
 URL_HOME: str = URL_BASE
 URL_TASK_PAGE: str = URL_BASE + "home.php?mod=task&do=apply&id=2&referer=%2F"
-URL_WAF_VERIFY: str = URL_BASE + "waf_zw_verify"
-
-# 外部API URL
-URL_EXTERNAL_SIGN_API: str = "https://52pojie-sign-sever.zzboy.tk/api/52pojie"
-
 # 请求头
 COMMON_HEADERS: Dict[str, str] = {
   'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
@@ -136,25 +128,9 @@ def check_status_and_get_params(
         if not qds_icon_found and not wbs_icon_found: # 没有找到任何相关图标
             return "无法确定签到状态 (未找到签到相关图片，可能页面结构改变或Cookie问题)", None
         
-        # 如果找到qds.png (未签到)，则继续获取参数
+        # 如果找到qds.png (未签到)，则继续尝试直接签到
         if qds_icon_found:
-            task_response = session.get(URL_TASK_PAGE, headers=COMMON_HEADERS, cookies=user_cookies, timeout=REQUEST_TIMEOUT)
-            task_response.raise_for_status()
-            task_text = task_response.text
-        
-            match_lz_lj = re.search(r" renversement\('(\d{4,})'\).* renversement\('(\d{4,})'\)", task_text, re.S)
-            if not match_lz_lj:
-                match_lz_lj = re.search(r".*='([0-9]{4,})'.*='([0-9]{4,})'.*", task_text, re.S)
-
-            if not match_lz_lj:
-                return "未查询到签到参数", None
-            lz, lj = match_lz_lj.group(1), match_lz_lj.group(2)
-
-            match_le = re.search(r".*='([a-zA-Z0-9/+]{40,})'.*", task_text, re.S)
-            if not match_le:
-                return "未查询到签到参数", None
-            le = match_le.group(1)
-            return "待签到 (参数已获取)", {"lz": lz, "lj": lj, "le": le}
+            return "待签到", {}
 
     except requests.exceptions.RequestException as e:
         return f"网络请求失败: {e}", None
@@ -166,41 +142,11 @@ def check_status_and_get_params(
 
 def execute_signin_flow(
     session: requests.Session,
-    user_cookies: Dict[str, str],
-    signin_params: Dict[str, str],
-    global_token: str
+    user_cookies: Dict[str, str]
 ) -> str:
-    """执行签到流程，包括调用外部API和提交WAF验证."""
+    """执行签到流程（仅依赖Cookie）."""
     try:
-        # 1. 调用外部API获取WAF payload
-        external_api_payload = {
-            "lz": signin_params["lz"],
-            "lj": signin_params["lj"],
-            "le": signin_params["le"],
-            "token": global_token
-        }
-        external_api_response = requests.post(
-            URL_EXTERNAL_SIGN_API, json=external_api_payload, timeout=REQUEST_TIMEOUT
-        )
-
-        if external_api_response.status_code != 200:
-            try:
-                error_msg = external_api_response.json().get('msg', external_api_response.text)
-            except json.JSONDecodeError:
-                error_msg = external_api_response.text
-            return f"外部签名API调用失败 ({external_api_response.status_code}): {error_msg}. 请检查API状态: https://zhustatus.azurewebsites.net/"
-        
-        waf_payload_data = external_api_response.text # 假设API直接返回waf_verify所需data字符串
-
-        # 2. 提交WAF验证
-        waf_response = session.post(
-            URL_WAF_VERIFY, headers=COMMON_HEADERS, cookies=user_cookies, data=waf_payload_data, timeout=REQUEST_TIMEOUT
-        )
-        waf_response.raise_for_status() # 检查WAF提交是否成功 (HTTP层面)
-        # WAF验证成功通常是302跳转或200 OK但内容提示，这里假定成功后可继续
-
-        # 3. 再次访问任务页面或特定页面以确认/完成签到
-        # 原脚本是再次GET url2 (URL_TASK_PAGE)
+        # 直接访问任务页面进行签到
         final_check_response = session.get(URL_TASK_PAGE, headers=COMMON_HEADERS, cookies=user_cookies, timeout=REQUEST_TIMEOUT)
         final_check_response.raise_for_status()
         
@@ -234,7 +180,6 @@ def execute_signin_flow(
 def process_single_user(
     user_idx: int,
     user_json_str: str,
-    global_token: str,
     session: requests.Session
 ) -> Dict[str, Any]:
     """处理单个用户的完整签到流程."""
@@ -254,9 +199,9 @@ def process_single_user(
     
     status_message, sign_params = check_status_and_get_params(session, user_cookies_dict)
 
-    if status_message == "待签到 (参数已获取)" and sign_params:
-        print(f"第 {user_idx} 个账号 : 获取到签到参数，尝试执行签到...")
-        final_status_message = execute_signin_flow(session, user_cookies_dict, sign_params, global_token)
+    if status_message == "待签到":
+        print(f"第 {user_idx} 个账号 : 尝试执行签到...")
+        final_status_message = execute_signin_flow(session, user_cookies_dict)
         status_message = final_status_message # 更新最终状态
     elif status_message is None and sign_params is None: # 未知情况
         status_message = "检查状态时返回意外结果"
@@ -275,11 +220,6 @@ def process_single_user(
 
 # --- 主程序 ---
 def main():
-    global_token = os.environ.get("PJ52_TOKEN")
-    if not global_token:
-        print("错误: 请在环境变量填入PJ52_TOKEN的值")
-        sys.exit(1)
-
     cookies_env_str = os.environ.get("PJ52_COOKIE")
     if not cookies_env_str:
         print("错误: 请在环境变量填写PJ52_COOKIE的值")
@@ -297,7 +237,7 @@ def main():
             sleep(sleep_duration)
         
         print(f"--- 开始处理第 {idx} 个账号 ---")
-        log_entry = process_single_user(idx, user_json_config, global_token, session)
+        log_entry = process_single_user(idx, user_json_config, session)
         # 单独通知每个账号的结果
         notify.send(f"吾爱签到 - 账号 {idx}", log_entry["msg"])
 

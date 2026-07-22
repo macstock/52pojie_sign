@@ -28,6 +28,5 @@ jobs:
 
       - name: Run sign script
         env:
-          PJ52_TOKEN: ${{ secrets.PJ52_TOKEN }}
           PJ52_COOKIE: ${{ secrets.PJ52_COOKIE }}
         run: python main.py
